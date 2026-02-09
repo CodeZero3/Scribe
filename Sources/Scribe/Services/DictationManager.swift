@@ -102,7 +102,7 @@ final class DictationManager {
             // Start warm message rotation when optimization is enabled
             if autoOptimize && promptOptimizer.isConfigured {
                 warmMessageIndex = 0
-                warmMessageTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+                warmMessageTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
                     Task { @MainActor [weak self] in
                         guard let self, self.isDictating else { return }
                         self.statusMessage = self.warmMessages[self.warmMessageIndex % self.warmMessages.count]
@@ -187,24 +187,6 @@ final class DictationManager {
         statusMessage = result != text ? "Optimized - copied to clipboard" : "Optimization failed - using original"
         copyToClipboard(result)
         return result
-    }
-
-    func optimizeAndSaveToHistory(_ text: String, mode: OptimizationMode, parentId: String) async {
-        statusMessage = "Optimizing..."
-        let result = await promptOptimizer.optimize(text, mode: mode)
-        if result != text {
-            historyStore.addRecord(
-                text: result,
-                duration: 0,
-                parentId: parentId,
-                optimizationMode: mode.displayName
-            )
-            lastResult = result
-            copyToClipboard(result)
-            statusMessage = "Optimized — copied to clipboard"
-        } else {
-            statusMessage = "Optimization failed — using original"
-        }
     }
 
     // MARK: - Clipboard
