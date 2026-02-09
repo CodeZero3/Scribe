@@ -4,7 +4,6 @@ struct HistoryView: View {
     @Environment(HistoryStore.self) private var store
     @Environment(DictationManager.self) private var manager
     @State private var searchText = ""
-    @State private var expandedRecordID: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,6 +22,10 @@ struct HistoryView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                Text("\(store.records.count) total")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
             .padding(8)
             .background(.bar)
@@ -40,50 +43,23 @@ struct HistoryView: View {
                 } description: {
                     Text(
                         searchText.isEmpty
-                            ? "Your dictation history will appear here."
+                            ? "Start dictating and your history will appear here."
                             : "Try a different search term."
                     )
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(filtered) { record in
-                    HistoryRowView(
-                        record: record,
-                        isExpanded: expandedRecordID == record.id
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            if expandedRecordID == record.id {
-                                expandedRecordID = nil
-                            } else {
-                                expandedRecordID = record.id
-                            }
-                        }
-                    }
-                    .contextMenu {
-                        Button("Copy") {
-                            let pasteboard = NSPasteboard.general
-                            pasteboard.clearContents()
-                            pasteboard.setString(record.text, forType: .string)
-                        }
-                        Button("Re-paste") {
-                            Task {
-                                manager.lastResult = record.text
-                                await manager.rePasteLast()
-                            }
-                        }
-                        Divider()
-                        Button("Delete", role: .destructive) {
-                            store.deleteRecord(record)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(filtered) { record in
+                            HistoryRowView(record: record, manager: manager, store: store)
+                            Divider()
                         }
                     }
                 }
-                .listStyle(.inset)
             }
         }
         .frame(minWidth: 400, minHeight: 300)
-        .navigationTitle("History")
     }
 }
 
@@ -91,26 +67,56 @@ struct HistoryView: View {
 
 struct HistoryRowView: View {
     let record: DictationRecord
-    let isExpanded: Bool
+    let manager: DictationManager
+    let store: HistoryStore
+    @State private var showCopied = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Text preview or full text
+        VStack(alignment: .leading, spacing: 8) {
+            // Full text — no line limit
             Text(record.text)
                 .font(.body)
-                .lineLimit(isExpanded ? nil : 2)
+                .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Metadata row
+            // Bottom bar: metadata + actions
             HStack(spacing: 12) {
+                // Metadata
                 Label(relativeTimestamp(record.timestamp), systemImage: "clock")
                 Label("\(record.wordCount) words", systemImage: "text.word.spacing")
                 Label(formattedDuration(record.duration), systemImage: "timer")
+
+                Spacer()
+
+                // Copy button
+                Button {
+                    manager.copyToClipboard(record.text)
+                    showCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        showCopied = false
+                    }
+                } label: {
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .foregroundStyle(showCopied ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy to clipboard")
+
+                // Delete button
+                Button {
+                    store.deleteRecord(record)
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Delete")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     private func relativeTimestamp(_ date: Date) -> String {

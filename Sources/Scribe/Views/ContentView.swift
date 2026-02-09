@@ -5,6 +5,12 @@ struct ContentView: View {
     @Environment(HistoryStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @State private var showCopied = false
+    @State private var selectedTab: SidebarTab = .history
+
+    enum SidebarTab: String, CaseIterable {
+        case history
+        case settings
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -12,7 +18,7 @@ struct ContentView: View {
         } detail: {
             detailView
         }
-        .navigationTitle("Scribe")
+        .navigationTitle(selectedTab == .history ? "Scribe" : "Settings")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 toolbarItems
@@ -45,13 +51,11 @@ struct ContentView: View {
             }
 
             // Navigation
-            List {
-                NavigationLink(value: "history") {
-                    Label("History", systemImage: "clock.arrow.circlepath")
-                }
-                NavigationLink(value: "settings") {
-                    Label("Settings", systemImage: "gear")
-                }
+            List(selection: $selectedTab) {
+                Label("History", systemImage: "clock.arrow.circlepath")
+                    .tag(SidebarTab.history)
+                Label("Settings", systemImage: "gear")
+                    .tag(SidebarTab.settings)
             }
             .listStyle(.sidebar)
         }
@@ -62,7 +66,6 @@ struct ContentView: View {
 
     private var dictationCard: some View {
         VStack(spacing: 12) {
-            // Mic button
             Button {
                 manager.toggleDictation()
             } label: {
@@ -82,7 +85,6 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .disabled(!manager.transcriptionEngine.isModelLoaded)
 
-            // Status
             VStack(spacing: 4) {
                 Text(manager.transcriptionEngine.loadingStatus)
                     .font(.caption2)
@@ -95,7 +97,6 @@ struct ContentView: View {
                 }
             }
 
-            // Hotkey hint
             Text("Hold Ctrl+CapsLock")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
@@ -139,10 +140,17 @@ struct ContentView: View {
 
     // MARK: - Detail View
 
+    @ViewBuilder
     private var detailView: some View {
-        HistoryView()
-            .environment(manager)
-            .environment(store)
+        switch selectedTab {
+        case .history:
+            HistoryView()
+                .environment(manager)
+                .environment(store)
+        case .settings:
+            SettingsView()
+                .environment(manager)
+        }
     }
 
     // MARK: - Toolbar
