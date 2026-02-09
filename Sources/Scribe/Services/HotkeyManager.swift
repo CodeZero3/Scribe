@@ -53,13 +53,19 @@ final class HotkeyManager {
             eventsOfInterest: eventMask,
             callback: { _, _, event, refcon -> Unmanaged<CGEvent>? in
                 guard let refcon else { return Unmanaged.passRetained(event) }
-                let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
 
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
                 let flags = event.flags
 
-                Task { @MainActor in
-                    manager.handleFlagsChanged(keyCode: keyCode, flags: flags)
+                // IMPORTANT: Do NOT use Task/@MainActor here — CGEvent tap
+                // callbacks run outside Swift concurrency context, and the
+                // runtime crashes trying to resolve the current executor.
+                // Use GCD to hop to main thread safely instead.
+                DispatchQueue.main.async {
+                    let manager = Unmanaged<HotkeyManager>.fromOpaque(refcon).takeUnretainedValue()
+                    MainActor.assumeIsolated {
+                        manager.handleFlagsChanged(keyCode: keyCode, flags: flags)
+                    }
                 }
 
                 return Unmanaged.passRetained(event)

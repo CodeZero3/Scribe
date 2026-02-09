@@ -73,7 +73,7 @@ final class PromptOptimizer {
         defer { isOptimizing = false }
 
         do {
-            let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=\(apiKey)")!
+            let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=\(apiKey)")!
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -104,8 +104,9 @@ final class PromptOptimizer {
 
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                NSLog("[Scribe] PromptOptimizer: API returned status %d",
-                      (response as? HTTPURLResponse)?.statusCode ?? -1)
+                let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+                let body = String(data: data, encoding: .utf8) ?? "no body"
+                NSLog("[Scribe] PromptOptimizer: API returned status %d — %@", status, body)
                 return text
             }
 

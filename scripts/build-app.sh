@@ -10,7 +10,7 @@ echo "=== Scribe Build ==="
 echo ""
 
 # Step 1: Build release binary
-echo "[1/3] Building release binary..."
+echo "[1/4] Building release binary..."
 swift build -c release 2>&1
 
 BINARY=".build/release/Scribe"
@@ -21,7 +21,7 @@ fi
 echo "      Binary built successfully."
 
 # Step 2: Create .app bundle
-echo "[2/3] Creating app bundle..."
+echo "[2/4] Creating app bundle..."
 
 APP_DIR="build/Scribe.app/Contents"
 rm -rf build/Scribe.app
@@ -46,8 +46,15 @@ fi
 
 echo "      App bundle created at build/Scribe.app"
 
-# Step 3: Report
-echo "[3/3] Done!"
+# Step 3: Codesign with entitlements
+echo "[3/4] Codesigning with entitlements..."
+codesign --force --deep --sign - \
+    --entitlements Resources/Scribe.entitlements \
+    build/Scribe.app
+echo "      Codesigned successfully."
+
+# Step 4: Report
+echo "[4/4] Done!"
 echo ""
 
 # Print app size

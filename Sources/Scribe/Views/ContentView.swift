@@ -5,12 +5,10 @@ struct ContentView: View {
     @Environment(HistoryStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @State private var showCopied = false
-    @State private var isOptimizing = false
     @State private var selectedTab: SidebarTab = .history
 
     enum SidebarTab: String, CaseIterable {
         case history
-        case optimize
         case settings
     }
 
@@ -23,7 +21,6 @@ struct ContentView: View {
         .navigationTitle({
             switch selectedTab {
             case .history: "Scribe"
-            case .optimize: "Optimize"
             case .settings: "Settings"
             }
         }())
@@ -64,16 +61,8 @@ struct ContentView: View {
                     .tag(SidebarTab.history)
                 Label("Settings", systemImage: "gear")
                     .tag(SidebarTab.settings)
-                Label("Optimize", systemImage: "wand.and.stars")
-                    .tag(SidebarTab.optimize)
             }
             .listStyle(.sidebar)
-
-            // Mode toggles
-            if manager.promptOptimizer.isConfigured {
-                Divider()
-                modeTogglesSection
-            }
         }
         .frame(minWidth: 220)
     }
@@ -83,6 +72,7 @@ struct ContentView: View {
     private var dictationCard: some View {
         VStack(spacing: 12) {
             Button {
+                DictationManager.log("Button tapped! isDictating=\(manager.isDictating), isModelLoaded=\(manager.transcriptionEngine.isModelLoaded)")
                 manager.toggleDictation()
             } label: {
                 VStack(spacing: 8) {
@@ -97,9 +87,13 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .disabled(!manager.transcriptionEngine.isModelLoaded)
+            .onAppear {
+                DictationManager.log("dictationCard appeared, isModelLoaded=\(manager.transcriptionEngine.isModelLoaded), disabled=\(!manager.transcriptionEngine.isModelLoaded)")
+            }
 
             VStack(spacing: 4) {
                 Text(manager.transcriptionEngine.loadingStatus)
@@ -131,28 +125,6 @@ struct ContentView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
-                if manager.promptOptimizer.isConfigured {
-                    Button {
-                        Task {
-                            isOptimizing = true
-                            let optimized = await manager.optimizeText(manager.lastResult)
-                            manager.lastResult = optimized
-                            isOptimizing = false
-                        }
-                    } label: {
-                        if isOptimizing {
-                            ProgressView()
-                                .controlSize(.mini)
-                        } else {
-                            Image(systemName: "wand.and.stars")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .help("Optimize as AI prompt")
-                    .disabled(isOptimizing)
-                }
 
                 Button {
                     manager.copyToClipboard(manager.lastResult)
@@ -177,45 +149,6 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Mode Toggles
-
-    private var modeTogglesSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Optimization")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 16)
-
-            ForEach(OptimizationMode.allCases) { mode in
-                modeToggleRow(mode)
-            }
-        }
-        .padding(.vertical, 10)
-    }
-
-    private func modeToggleRow(_ mode: OptimizationMode) -> some View {
-        let isLocked = mode.requiresUnlock && !manager.promptOptimizer.optimizationUnlocked
-        return HStack(spacing: 8) {
-            Image(systemName: mode.icon)
-                .font(.caption)
-                .foregroundColor(isLocked ? .secondary : .blue)
-                .frame(width: 16)
-            Text(mode.displayName)
-                .font(.caption)
-            Spacer()
-            Toggle("", isOn: Binding(
-                get: { manager.promptOptimizer.isModeEnabled(mode) },
-                set: { _ in manager.promptOptimizer.toggleMode(mode) }
-            ))
-            .toggleStyle(.switch)
-            .controlSize(.mini)
-            .labelsHidden()
-            .disabled(isLocked)
-        }
-        .padding(.horizontal, 16)
-        .opacity(isLocked ? 0.6 : 1.0)
-    }
-
     // MARK: - Detail View
 
     @ViewBuilder
@@ -225,9 +158,6 @@ struct ContentView: View {
             HistoryView()
                 .environment(manager)
                 .environment(store)
-        case .optimize:
-            OptimizeView()
-                .environment(manager)
         case .settings:
             SettingsView()
                 .environment(manager)

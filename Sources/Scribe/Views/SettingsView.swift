@@ -4,8 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(DictationManager.self) private var manager
     @State private var availableDevices: [AudioDeviceInfo] = []
-
-
+    @AppStorage("geminiAPIKey") private var geminiAPIKey = ""
 
     var body: some View {
         @Bindable var mgr = manager
@@ -56,7 +55,14 @@ struct SettingsView: View {
             // MARK: - AI Optimization
 
             Section("AI Optimization") {
-                Text("Configure AI optimization modes and API key in the Optimize tab.")
+                SecureField("Gemini API Key", text: $geminiAPIKey)
+                    .textFieldStyle(.roundedBorder)
+
+                Link("Get free API key from Google AI Studio",
+                     destination: URL(string: "https://aistudio.google.com/apikey")!)
+                    .font(.caption)
+
+                Text("Use the wand icon on any history item to optimize it with AI.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

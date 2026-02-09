@@ -23,10 +23,6 @@ final class DictationManager {
     var enableCleanup = true
     var reviewBeforeInsert = false
 
-    var autoOptimize: Bool {
-        !promptOptimizer.enabledModes.isEmpty
-    }
-
     // Review popup state
     var pendingCleanupResult: CleanupResult?
     var showReviewPopup = false
@@ -53,10 +49,10 @@ final class DictationManager {
     ]
 
     func setup() async {
-        NSLog("[Scribe] DictationManager.setup() called")
+        Self.log("DictationManager.setup() called")
         // Load whisper model
         await transcriptionEngine.loadModel()
-        NSLog("[Scribe] Model load finished, status: %@", transcriptionEngine.loadingStatus)
+        Self.log("Model load finished, status: \(transcriptionEngine.loadingStatus), isModelLoaded: \(transcriptionEngine.isModelLoaded)")
 
         // Register hotkeys — push-to-talk (Ctrl+CapsLock)
         hotkeyManager.onStartDictation = { [weak self] in
@@ -76,7 +72,7 @@ final class DictationManager {
     }
 
     func toggleDictation() {
-        NSLog("[Scribe] toggleDictation called, isDictating: %@", isDictating ? "true" : "false")
+        Self.log("toggleDictation called, isDictating: \(isDictating)")
         if isDictating {
             stopDictation()
         } else {
@@ -85,22 +81,25 @@ final class DictationManager {
     }
 
     func startDictation() {
-        guard !isDictating else { return }
+        guard !isDictating else {
+            Self.log("startDictation: already dictating, skipping")
+            return
+        }
         guard transcriptionEngine.isModelLoaded else {
-            NSLog("[Scribe] startDictation: Model not ready")
+            Self.log("startDictation: Model not ready")
             statusMessage = "Model not ready"
             return
         }
         do {
-            NSLog("[Scribe] startDictation: Starting recording...")
+            Self.log("startDictation: Starting recording...")
             try audioRecorder.startRecording()
             isDictating = true
             recordingStartTime = Date()
             statusMessage = "Recording..."
-            NSLog("[Scribe] startDictation: Recording started")
+            Self.log("startDictation: Recording started successfully")
 
-            // Start warm message rotation when optimization is enabled
-            if autoOptimize && promptOptimizer.isConfigured {
+            // Start warm message rotation
+            if promptOptimizer.isConfigured {
                 warmMessageIndex = 0
                 warmMessageTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
                     Task { @MainActor [weak self] in
@@ -111,14 +110,34 @@ final class DictationManager {
                 }
             }
         } catch {
-            NSLog("[Scribe] startDictation error: %@", error.localizedDescription)
+            Self.log("startDictation ERROR: \(error.localizedDescription)")
             statusMessage = "Mic error: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Debug Logging
+
+    private static let logFile: URL = {
+        let path = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop/scribe_debug.log")
+        FileManager.default.createFile(atPath: path.path, contents: nil)
+        return path
+    }()
+
+    static func log(_ msg: String) {
+        let ts = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(ts)] \(msg)\n"
+        print("[Scribe] \(msg)")
+        if let data = line.data(using: .utf8),
+           let fh = try? FileHandle(forWritingTo: logFile) {
+            fh.seekToEndOfFile()
+            fh.write(data)
+            fh.closeFile()
         }
     }
 
     func stopDictation() {
         guard isDictating else { return }
-        NSLog("[Scribe] stopDictation called")
+        Self.log("stopDictation called")
         warmMessageTimer?.invalidate()
         warmMessageTimer = nil
         let samples = audioRecorder.stopRecording()
@@ -126,16 +145,17 @@ final class DictationManager {
         isDictating = false
         recordingStartTime = nil
 
-        NSLog("[Scribe] stopDictation: Got %d samples", samples.count)
+        Self.log("stopDictation: Got \(samples.count) samples")
         guard !samples.isEmpty else {
             statusMessage = "No audio captured"
+            Self.log("stopDictation: NO AUDIO — 0 samples!")
             return
         }
 
         statusMessage = "Transcribing..."
         Task {
             let text = await transcriptionEngine.transcribe(audioSamples: samples)
-            NSLog("[Scribe] Transcription result: %@", text)
+            Self.log("Transcription result: \(text.prefix(100))")
             guard !text.isEmpty && !text.hasPrefix("[") else {
                 statusMessage = "No speech detected"
                 return
@@ -143,13 +163,7 @@ final class DictationManager {
 
             // Run text cleanup if enabled
             let cleanupResult = enableCleanup ? textCleanup.cleanup(text) : nil
-            var finalText = cleanupResult?.cleaned ?? text
-
-            // Run prompt optimization if enabled
-            if autoOptimize && promptOptimizer.isConfigured {
-                statusMessage = "Optimizing..."
-                finalText = await promptOptimizer.optimizeWithEnabledModes(finalText)
-            }
+            let finalText = cleanupResult?.cleaned ?? text
 
             lastResult = finalText
             pendingOriginalText = text
@@ -176,17 +190,20 @@ final class DictationManager {
 
     // MARK: - Prompt Optimization
 
-    func optimizeText(_ text: String, mode: OptimizationMode? = nil) async -> String {
+    @discardableResult
+    func optimizeText(_ text: String, mode: OptimizationMode, parentId: String) async -> DictationRecord? {
         statusMessage = "Optimizing..."
-        let result: String
-        if let mode {
-            result = await promptOptimizer.optimize(text, mode: mode)
-        } else {
-            result = await promptOptimizer.optimizeWithEnabledModes(text)
+        let result = await promptOptimizer.optimize(text, mode: mode)
+        guard result != text else {
+            statusMessage = "Optimization failed - using original"
+            return nil
         }
-        statusMessage = result != text ? "Optimized - copied to clipboard" : "Optimization failed - using original"
+        statusMessage = "Optimized - copied to clipboard"
         copyToClipboard(result)
-        return result
+        let record = historyStore.addOptimizedRecord(
+            text: result, parentId: parentId, mode: mode.rawValue
+        )
+        return record
     }
 
     // MARK: - Clipboard
