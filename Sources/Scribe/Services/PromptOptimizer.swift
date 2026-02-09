@@ -8,12 +8,32 @@ final class PromptOptimizer {
         set { UserDefaults.standard.set(newValue, forKey: "geminiAPIKey") }
     }
 
+    var selectedMode: OptimizationMode {
+        get {
+            let raw = UserDefaults.standard.string(forKey: "selectedOptimizationMode") ?? OptimizationMode.aiPrompts.rawValue
+            return OptimizationMode(rawValue: raw) ?? .aiPrompts
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "selectedOptimizationMode") }
+    }
+
+    var optimizationUnlocked: Bool {
+        get { UserDefaults.standard.bool(forKey: "optimizationUnlocked") }
+        set { UserDefaults.standard.set(newValue, forKey: "optimizationUnlocked") }
+    }
+
     var isOptimizing = false
 
     var isConfigured: Bool { !apiKey.isEmpty }
 
-    func optimize(_ text: String) async -> String {
+    func isModeAvailable(_ mode: OptimizationMode) -> Bool {
+        !mode.requiresUnlock || optimizationUnlocked
+    }
+
+    func optimize(_ text: String, mode: OptimizationMode? = nil) async -> String {
+        let activeMode = mode ?? selectedMode
         guard isConfigured else { return text }
+        guard isModeAvailable(activeMode) else { return text }
+
         isOptimizing = true
         defer { isOptimizing = false }
 
@@ -27,19 +47,7 @@ final class PromptOptimizer {
             let body: [String: Any] = [
                 "system_instruction": [
                     "parts": [
-                        ["text": """
-                        You are a prompt optimization assistant. The user has dictated text using voice-to-text. \
-                        Your job is to restructure it into a clear, well-formatted prompt optimized for AI consumption.
-
-                        Rules:
-                        - Preserve the user's original intent completely
-                        - Fix grammar, remove filler words, improve clarity
-                        - Structure with clear sections if the request is complex
-                        - Use imperative/direct language appropriate for AI prompts
-                        - Do NOT add information the user didn't express
-                        - Do NOT wrap in quotes or add meta-commentary
-                        - Return ONLY the optimized prompt text, nothing else
-                        """]
+                        ["text": activeMode.systemPrompt]
                     ]
                 ],
                 "contents": [

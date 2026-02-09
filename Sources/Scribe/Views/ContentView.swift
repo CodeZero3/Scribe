@@ -10,6 +10,7 @@ struct ContentView: View {
 
     enum SidebarTab: String, CaseIterable {
         case history
+        case optimize
         case settings
     }
 
@@ -19,7 +20,13 @@ struct ContentView: View {
         } detail: {
             detailView
         }
-        .navigationTitle(selectedTab == .history ? "Scribe" : "Settings")
+        .navigationTitle({
+            switch selectedTab {
+            case .history: "Scribe"
+            case .optimize: "Optimize"
+            case .settings: "Settings"
+            }
+        }())
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 toolbarItems
@@ -55,6 +62,8 @@ struct ContentView: View {
             List(selection: $selectedTab) {
                 Label("History", systemImage: "clock.arrow.circlepath")
                     .tag(SidebarTab.history)
+                Label("Optimize", systemImage: "wand.and.stars")
+                    .tag(SidebarTab.optimize)
                 Label("Settings", systemImage: "gear")
                     .tag(SidebarTab.settings)
             }
@@ -171,6 +180,9 @@ struct ContentView: View {
             HistoryView()
                 .environment(manager)
                 .environment(store)
+        case .optimize:
+            OptimizeView()
+                .environment(manager)
         case .settings:
             SettingsView()
                 .environment(manager)

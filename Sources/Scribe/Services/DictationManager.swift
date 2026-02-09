@@ -40,6 +40,19 @@ final class DictationManager {
     private var recordingStartTime: Date?
     private var pendingOriginalText: String = ""
 
+    // Warm encouragement messages during recording
+    private var warmMessageTimer: Timer?
+    private var warmMessageIndex = 0
+    private let warmMessages = [
+        "Listening...",
+        "Just speak naturally, I'll handle the rest",
+        "Take your time...",
+        "Don't worry about structure, that's my job",
+        "Keep going, you're doing great...",
+        "I'll clean everything up for you",
+        "Say it however feels natural...",
+    ]
+
     func setup() async {
         NSLog("[Scribe] DictationManager.setup() called")
         // Load whisper model
@@ -86,6 +99,18 @@ final class DictationManager {
             recordingStartTime = Date()
             statusMessage = "Recording..."
             NSLog("[Scribe] startDictation: Recording started")
+
+            // Start warm message rotation when optimization is enabled
+            if autoOptimize && promptOptimizer.isConfigured {
+                warmMessageIndex = 0
+                warmMessageTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.isDictating else { return }
+                        self.statusMessage = self.warmMessages[self.warmMessageIndex % self.warmMessages.count]
+                        self.warmMessageIndex += 1
+                    }
+                }
+            }
         } catch {
             NSLog("[Scribe] startDictation error: %@", error.localizedDescription)
             statusMessage = "Mic error: \(error.localizedDescription)"
@@ -95,6 +120,8 @@ final class DictationManager {
     func stopDictation() {
         guard isDictating else { return }
         NSLog("[Scribe] stopDictation called")
+        warmMessageTimer?.invalidate()
+        warmMessageTimer = nil
         let samples = audioRecorder.stopRecording()
         let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
         isDictating = false
@@ -150,9 +177,9 @@ final class DictationManager {
 
     // MARK: - Prompt Optimization
 
-    func optimizeText(_ text: String) async -> String {
+    func optimizeText(_ text: String, mode: OptimizationMode? = nil) async -> String {
         statusMessage = "Optimizing..."
-        let result = await promptOptimizer.optimize(text)
+        let result = await promptOptimizer.optimize(text, mode: mode)
         statusMessage = result != text ? "Optimized - copied to clipboard" : "Optimization failed - using original"
         copyToClipboard(result)
         return result

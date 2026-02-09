@@ -89,27 +89,35 @@ struct HistoryRowView: View {
 
                 Spacer()
 
-                // Optimize button
+                // Optimize menu
                 if manager.promptOptimizer.isConfigured {
-                    Button {
-                        Task {
-                            isOptimizing = true
-                            let optimized = await manager.optimizeText(record.text)
-                            manager.lastResult = optimized
-                            isOptimizing = false
-                        }
-                    } label: {
-                        if isOptimizing {
-                            ProgressView()
-                                .controlSize(.mini)
-                        } else {
+                    if isOptimizing {
+                        ProgressView()
+                            .controlSize(.mini)
+                    } else {
+                        Menu {
+                            ForEach(OptimizationMode.allCases) { mode in
+                                let isLocked = mode.requiresUnlock && !manager.promptOptimizer.optimizationUnlocked
+                                Button {
+                                    Task {
+                                        isOptimizing = true
+                                        let optimized = await manager.optimizeText(record.text, mode: mode)
+                                        manager.lastResult = optimized
+                                        isOptimizing = false
+                                    }
+                                } label: {
+                                    Label(mode.displayName, systemImage: isLocked ? "lock.fill" : mode.icon)
+                                }
+                                .disabled(isLocked)
+                            }
+                        } label: {
                             Image(systemName: "wand.and.stars")
                                 .foregroundStyle(.secondary)
                         }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Optimize with mode")
                     }
-                    .buttonStyle(.plain)
-                    .help("Optimize as AI prompt")
-                    .disabled(isOptimizing)
                 }
 
                 // Copy button
