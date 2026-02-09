@@ -3,7 +3,6 @@ import SwiftUI
 struct OptimizeView: View {
     @Environment(DictationManager.self) private var manager
     @AppStorage("geminiAPIKey") private var geminiAPIKey = ""
-    @AppStorage("autoOptimize") private var autoOptimize = false
 
     var body: some View {
         @Bindable var optimizer = manager.promptOptimizer
@@ -44,10 +43,7 @@ struct OptimizeView: View {
                      destination: URL(string: "https://aistudio.google.com/apikey")!)
                     .font(.caption)
 
-                Toggle("Auto-optimize dictations", isOn: $autoOptimize)
-                    .disabled(geminiAPIKey.isEmpty)
-
-                Text("When enabled, dictated text is automatically optimized using the selected mode before copying to clipboard.")
+                Text("Toggle modes on/off using the sidebar switches or the cards above. Dictated text is automatically optimized through all enabled modes.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -61,53 +57,49 @@ struct OptimizeView: View {
 
     @ViewBuilder
     private func modeCard(_ mode: OptimizationMode) -> some View {
-        let isSelected = manager.promptOptimizer.selectedMode == mode
+        let isEnabled = manager.promptOptimizer.isModeEnabled(mode)
         let isLocked = mode.requiresUnlock && !manager.promptOptimizer.optimizationUnlocked
 
-        Button {
-            if !isLocked {
-                manager.promptOptimizer.selectedMode = mode
-            }
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: mode.icon)
-                    .font(.title2)
-                    .foregroundColor(isLocked ? .secondary : .blue)
-                    .frame(width: 32)
+        HStack(spacing: 12) {
+            Image(systemName: mode.icon)
+                .font(.title2)
+                .foregroundColor(isLocked ? .secondary : .blue)
+                .frame(width: 32)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(mode.displayName)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        if !mode.requiresUnlock {
-                            Text("Free")
-                                .font(.caption2)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1)
-                                .background(.green.opacity(0.15), in: Capsule())
-                                .foregroundStyle(.green)
-                        }
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(mode.displayName)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    if !mode.requiresUnlock {
+                        Text("Free")
+                            .font(.caption2)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.green.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.green)
                     }
-                    Text(mode.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-
-                Spacer()
-
-                if isLocked {
-                    Image(systemName: "lock.fill")
-                        .foregroundStyle(.secondary)
-                } else if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.blue)
-                }
+                Text(mode.detailedDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
+
+            Spacer()
+
+            if isLocked {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.secondary)
+            } else {
+                Toggle("", isOn: Binding(
+                    get: { isEnabled },
+                    set: { _ in manager.promptOptimizer.toggleMode(mode) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 4)
         .opacity(isLocked ? 0.6 : 1.0)
     }
 }

@@ -62,12 +62,18 @@ struct ContentView: View {
             List(selection: $selectedTab) {
                 Label("History", systemImage: "clock.arrow.circlepath")
                     .tag(SidebarTab.history)
-                Label("Optimize", systemImage: "wand.and.stars")
-                    .tag(SidebarTab.optimize)
                 Label("Settings", systemImage: "gear")
                     .tag(SidebarTab.settings)
+                Label("Optimize", systemImage: "wand.and.stars")
+                    .tag(SidebarTab.optimize)
             }
             .listStyle(.sidebar)
+
+            // Mode toggles
+            if manager.promptOptimizer.isConfigured {
+                Divider()
+                modeTogglesSection
+            }
         }
         .frame(minWidth: 220)
     }
@@ -169,6 +175,45 @@ struct ContentView: View {
                 .lineLimit(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    // MARK: - Mode Toggles
+
+    private var modeTogglesSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Optimization")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 16)
+
+            ForEach(OptimizationMode.allCases) { mode in
+                modeToggleRow(mode)
+            }
+        }
+        .padding(.vertical, 10)
+    }
+
+    private func modeToggleRow(_ mode: OptimizationMode) -> some View {
+        let isLocked = mode.requiresUnlock && !manager.promptOptimizer.optimizationUnlocked
+        return HStack(spacing: 8) {
+            Image(systemName: mode.icon)
+                .font(.caption)
+                .foregroundColor(isLocked ? .secondary : .blue)
+                .frame(width: 16)
+            Text(mode.displayName)
+                .font(.caption)
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { manager.promptOptimizer.isModeEnabled(mode) },
+                set: { _ in manager.promptOptimizer.toggleMode(mode) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .labelsHidden()
+            .disabled(isLocked)
+        }
+        .padding(.horizontal, 16)
+        .opacity(isLocked ? 0.6 : 1.0)
     }
 
     // MARK: - Detail View

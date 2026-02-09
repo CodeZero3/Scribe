@@ -8,16 +8,40 @@ final class PromptOptimizer {
         set { UserDefaults.standard.set(newValue, forKey: "geminiAPIKey") }
     }
 
-    var selectedMode: OptimizationMode {
+    var enabledModes: Set<OptimizationMode> {
         get {
-            let raw = UserDefaults.standard.string(forKey: "selectedOptimizationMode") ?? OptimizationMode.aiPrompts.rawValue
-            return OptimizationMode(rawValue: raw) ?? .aiPrompts
+            guard let raw = UserDefaults.standard.stringArray(forKey: "enabledOptimizationModes") else {
+                return [.aiPrompts]
+            }
+            let modes = raw.compactMap { OptimizationMode(rawValue: $0) }
+            return Set(modes)
         }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: "selectedOptimizationMode") }
+        set {
+            UserDefaults.standard.set(newValue.map(\.rawValue), forKey: "enabledOptimizationModes")
+        }
+    }
+
+    func isModeEnabled(_ mode: OptimizationMode) -> Bool {
+        enabledModes.contains(mode)
+    }
+
+    func toggleMode(_ mode: OptimizationMode) {
+        var modes = enabledModes
+        if modes.contains(mode) {
+            modes.remove(mode)
+        } else {
+            modes.insert(mode)
+        }
+        enabledModes = modes
     }
 
     var optimizationUnlocked: Bool {
-        get { UserDefaults.standard.bool(forKey: "optimizationUnlocked") }
+        get {
+            // Default to unlocked; flip to false when StoreKit gating is added
+            UserDefaults.standard.object(forKey: "optimizationUnlocked") == nil
+                ? true
+                : UserDefaults.standard.bool(forKey: "optimizationUnlocked")
+        }
         set { UserDefaults.standard.set(newValue, forKey: "optimizationUnlocked") }
     }
 
@@ -29,10 +53,21 @@ final class PromptOptimizer {
         !mode.requiresUnlock || optimizationUnlocked
     }
 
-    func optimize(_ text: String, mode: OptimizationMode? = nil) async -> String {
-        let activeMode = mode ?? selectedMode
+    func optimizeWithEnabledModes(_ text: String) async -> String {
         guard isConfigured else { return text }
-        guard isModeAvailable(activeMode) else { return text }
+        let orderedModes = OptimizationMode.allCases.filter { enabledModes.contains($0) && isModeAvailable($0) }
+        guard !orderedModes.isEmpty else { return text }
+
+        var result = text
+        for mode in orderedModes {
+            result = await optimize(result, mode: mode)
+        }
+        return result
+    }
+
+    func optimize(_ text: String, mode: OptimizationMode) async -> String {
+        guard isConfigured else { return text }
+        guard isModeAvailable(mode) else { return text }
 
         isOptimizing = true
         defer { isOptimizing = false }
@@ -47,7 +82,7 @@ final class PromptOptimizer {
             let body: [String: Any] = [
                 "system_instruction": [
                     "parts": [
-                        ["text": activeMode.systemPrompt]
+                        ["text": mode.systemPrompt]
                     ]
                 ],
                 "contents": [

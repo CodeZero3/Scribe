@@ -24,8 +24,7 @@ final class DictationManager {
     var reviewBeforeInsert = false
 
     var autoOptimize: Bool {
-        get { UserDefaults.standard.bool(forKey: "autoOptimize") }
-        set { UserDefaults.standard.set(newValue, forKey: "autoOptimize") }
+        !promptOptimizer.enabledModes.isEmpty
     }
 
     // Review popup state
@@ -149,7 +148,7 @@ final class DictationManager {
             // Run prompt optimization if enabled
             if autoOptimize && promptOptimizer.isConfigured {
                 statusMessage = "Optimizing..."
-                finalText = await promptOptimizer.optimize(finalText)
+                finalText = await promptOptimizer.optimizeWithEnabledModes(finalText)
             }
 
             lastResult = finalText
@@ -179,7 +178,12 @@ final class DictationManager {
 
     func optimizeText(_ text: String, mode: OptimizationMode? = nil) async -> String {
         statusMessage = "Optimizing..."
-        let result = await promptOptimizer.optimize(text, mode: mode)
+        let result: String
+        if let mode {
+            result = await promptOptimizer.optimize(text, mode: mode)
+        } else {
+            result = await promptOptimizer.optimizeWithEnabledModes(text)
+        }
         statusMessage = result != text ? "Optimized - copied to clipboard" : "Optimization failed - using original"
         copyToClipboard(result)
         return result
