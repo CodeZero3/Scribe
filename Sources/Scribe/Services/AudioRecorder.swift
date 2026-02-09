@@ -1,6 +1,9 @@
 @preconcurrency import AVFoundation
 import CoreAudio
 import Foundation
+import os
+
+private let audioLogger = Logger(subsystem: "com.scribe.app", category: "AudioRecorder")
 
 @Observable
 @MainActor
@@ -18,20 +21,8 @@ final class AudioRecorder {
     /// Thread-safe sample buffer — written from audio thread, read from main thread
     private let sampleBuffer = SampleBuffer()
 
-    // MARK: - File-based debug logging (NSLog gets swallowed for unsigned apps)
-
     nonisolated private static func debugLog(_ msg: String) {
-        let ts = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(ts)] [Audio] \(msg)\n"
-        NSLog("[Scribe] %@", msg)
-        let logPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Desktop/scribe_debug.log")
-        if let data = line.data(using: .utf8),
-           let fh = try? FileHandle(forWritingTo: logPath) {
-            fh.seekToEndOfFile()
-            fh.write(data)
-            fh.closeFile()
-        }
+        audioLogger.info("\(msg)")
     }
 
     // MARK: - Recording

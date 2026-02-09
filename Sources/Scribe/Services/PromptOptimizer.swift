@@ -1,11 +1,58 @@
 import Foundation
+import Security
 
 @Observable
 @MainActor
 final class PromptOptimizer {
+    private static let keychainService = "com.scribe.gemini-api-key"
+
     var apiKey: String {
-        get { UserDefaults.standard.string(forKey: "geminiAPIKey") ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: "geminiAPIKey") }
+        get { Self.readKeychain() }
+        set { Self.writeKeychain(newValue) }
+    }
+
+    // MARK: - Keychain helpers
+
+    private static func readKeychain() -> String {
+        // Migrate from UserDefaults on first access
+        if let legacy = UserDefaults.standard.string(forKey: "geminiAPIKey"), !legacy.isEmpty {
+            writeKeychain(legacy)
+            UserDefaults.standard.removeObject(forKey: "geminiAPIKey")
+            return legacy
+        }
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data,
+              let key = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return key
+    }
+
+    private static func writeKeychain(_ key: String) {
+        let data = key.data(using: .utf8) ?? Data()
+        // Delete existing first
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        guard !key.isEmpty else { return }
+
+        let addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecValueData as String: data
+        ]
+        SecItemAdd(addQuery as CFDictionary, nil)
     }
 
     var enabledModes: Set<OptimizationMode> {

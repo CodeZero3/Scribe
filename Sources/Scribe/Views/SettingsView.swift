@@ -4,7 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(DictationManager.self) private var manager
     @State private var availableDevices: [AudioDeviceInfo] = []
-    @AppStorage("geminiAPIKey") private var geminiAPIKey = ""
+    @State private var geminiAPIKey = ""
 
     var body: some View {
         @Bindable var mgr = manager
@@ -79,6 +79,10 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .onAppear {
             loadAudioDevices()
+            geminiAPIKey = manager.promptOptimizer.apiKey
+        }
+        .onChange(of: geminiAPIKey) { _, newValue in
+            manager.promptOptimizer.apiKey = newValue
         }
     }
 

@@ -72,7 +72,6 @@ struct ContentView: View {
     private var dictationCard: some View {
         VStack(spacing: 12) {
             Button {
-                DictationManager.log("Button tapped! isDictating=\(manager.isDictating), isModelLoaded=\(manager.transcriptionEngine.isModelLoaded)")
                 manager.toggleDictation()
             } label: {
                 VStack(spacing: 8) {
@@ -91,9 +90,6 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .disabled(!manager.transcriptionEngine.isModelLoaded)
-            .onAppear {
-                DictationManager.log("dictationCard appeared, isModelLoaded=\(manager.transcriptionEngine.isModelLoaded), disabled=\(!manager.transcriptionEngine.isModelLoaded)")
-            }
 
             VStack(spacing: 4) {
                 Text(manager.transcriptionEngine.loadingStatus)

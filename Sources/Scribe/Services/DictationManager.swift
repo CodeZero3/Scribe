@@ -1,5 +1,8 @@
 import AppKit
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.scribe.app", category: "DictationManager")
 
 @Observable
 @MainActor
@@ -49,10 +52,12 @@ final class DictationManager {
     ]
 
     func setup() async {
-        Self.log("DictationManager.setup() called")
+        logger.info("DictationManager.setup() called")
+        statusMessage = "Warming up..."
+
         // Load whisper model
         await transcriptionEngine.loadModel()
-        Self.log("Model load finished, status: \(transcriptionEngine.loadingStatus), isModelLoaded: \(transcriptionEngine.isModelLoaded)")
+        logger.info("Model load finished, status: \(self.transcriptionEngine.loadingStatus), isModelLoaded: \(self.transcriptionEngine.isModelLoaded)")
 
         // Register hotkeys — push-to-talk (Ctrl+CapsLock)
         hotkeyManager.onStartDictation = { [weak self] in
@@ -69,10 +74,19 @@ final class DictationManager {
             }
         }
         hotkeyManager.registerHotkeys()
+
+        // Show ready message briefly so user knows they can start
+        if transcriptionEngine.isModelLoaded {
+            statusMessage = "Ready — hold Ctrl+CapsLock to dictate"
+            try? await Task.sleep(for: .seconds(5))
+            if statusMessage == "Ready — hold Ctrl+CapsLock to dictate" {
+                statusMessage = ""
+            }
+        }
     }
 
     func toggleDictation() {
-        Self.log("toggleDictation called, isDictating: \(isDictating)")
+        logger.debug("toggleDictation called, isDictating: \(self.isDictating)")
         if isDictating {
             stopDictation()
         } else {
@@ -82,21 +96,21 @@ final class DictationManager {
 
     func startDictation() {
         guard !isDictating else {
-            Self.log("startDictation: already dictating, skipping")
+            logger.debug("startDictation: already dictating, skipping")
             return
         }
         guard transcriptionEngine.isModelLoaded else {
-            Self.log("startDictation: Model not ready")
-            statusMessage = "Model not ready"
+            logger.info("startDictation: Model not ready yet")
+            statusMessage = "Still warming up — try again in a moment"
             return
         }
         do {
-            Self.log("startDictation: Starting recording...")
+            logger.info("startDictation: Starting recording...")
             try audioRecorder.startRecording()
             isDictating = true
             recordingStartTime = Date()
             statusMessage = "Recording..."
-            Self.log("startDictation: Recording started successfully")
+            logger.info("startDictation: Recording started successfully")
 
             // Start warm message rotation
             if promptOptimizer.isConfigured {
@@ -110,34 +124,14 @@ final class DictationManager {
                 }
             }
         } catch {
-            Self.log("startDictation ERROR: \(error.localizedDescription)")
+            logger.error("startDictation ERROR: \(error.localizedDescription)")
             statusMessage = "Mic error: \(error.localizedDescription)"
-        }
-    }
-
-    // MARK: - Debug Logging
-
-    private static let logFile: URL = {
-        let path = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop/scribe_debug.log")
-        FileManager.default.createFile(atPath: path.path, contents: nil)
-        return path
-    }()
-
-    static func log(_ msg: String) {
-        let ts = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(ts)] \(msg)\n"
-        print("[Scribe] \(msg)")
-        if let data = line.data(using: .utf8),
-           let fh = try? FileHandle(forWritingTo: logFile) {
-            fh.seekToEndOfFile()
-            fh.write(data)
-            fh.closeFile()
         }
     }
 
     func stopDictation() {
         guard isDictating else { return }
-        Self.log("stopDictation called")
+        logger.info("stopDictation called")
         warmMessageTimer?.invalidate()
         warmMessageTimer = nil
         let samples = audioRecorder.stopRecording()
@@ -145,17 +139,17 @@ final class DictationManager {
         isDictating = false
         recordingStartTime = nil
 
-        Self.log("stopDictation: Got \(samples.count) samples")
+        logger.info("stopDictation: Got \(samples.count) samples")
         guard !samples.isEmpty else {
             statusMessage = "No audio captured"
-            Self.log("stopDictation: NO AUDIO — 0 samples!")
+            logger.warning("stopDictation: NO AUDIO — 0 samples!")
             return
         }
 
         statusMessage = "Transcribing..."
         Task {
             let text = await transcriptionEngine.transcribe(audioSamples: samples)
-            Self.log("Transcription result: \(text.prefix(100))")
+            logger.info("Transcription result: \(text.prefix(100))")
             guard !text.isEmpty && !text.hasPrefix("[") else {
                 statusMessage = "No speech detected"
                 return
