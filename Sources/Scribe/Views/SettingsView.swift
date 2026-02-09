@@ -32,10 +32,23 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // MARK: - Text Cleanup
+
+            Section("Text Cleanup") {
+                Toggle("Clean up transcriptions", isOn: $mgr.enableCleanup)
+                Text("Removes filler words (um, uh, like...), fixes punctuation and capitalization.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             // MARK: - Behavior
 
             Section("Behavior") {
                 Toggle("Auto-paste after dictation", isOn: $mgr.autoPaste)
+                Toggle("Review before inserting", isOn: $mgr.reviewBeforeInsert)
+                Text("Show a popup to review and edit the transcription before it is inserted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             // MARK: - Hotkeys (read-only)

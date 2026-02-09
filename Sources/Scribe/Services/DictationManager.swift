@@ -9,6 +9,7 @@ final class DictationManager {
     let hotkeyManager = HotkeyManager()
     let textInserter = TextInserter()
     let historyStore = HistoryStore()
+    let textCleanup = TextCleanup()
 
     var lastResult = ""
     var isDictating = false
@@ -18,9 +19,20 @@ final class DictationManager {
     var selectedDeviceID = ""
     var selectedModel = "base.en"
     var autoPaste = true
+    var enableCleanup = true
+    var reviewBeforeInsert = false
+
+    // Review popup state
+    var pendingCleanupResult: CleanupResult?
+    var showReviewPopup = false
+
+    /// Callback set by ScribeApp to open the review window
+    @ObservationIgnored
+    var onRequestReview: (() -> Void)?
 
     // Duration tracking
     private var recordingStartTime: Date?
+    private var pendingOriginalText: String = ""
 
     func setup() async {
         // Load whisper model
@@ -79,17 +91,65 @@ final class DictationManager {
                 statusMessage = "No speech detected"
                 return
             }
-            lastResult = text
-            statusMessage = "Done - inserted text"
 
-            // Save to history
-            historyStore.addRecord(text: text, duration: duration)
+            // Run text cleanup if enabled
+            let cleanupResult = enableCleanup ? textCleanup.cleanup(text) : nil
+            let finalText = cleanupResult?.cleaned ?? text
 
-            // Auto-paste if enabled
-            if autoPaste {
-                await textInserter.insertText(text)
+            lastResult = finalText
+            pendingOriginalText = text
+
+            // Save to history (save the final/cleaned text)
+            historyStore.addRecord(text: finalText, duration: duration)
+
+            // Determine insertion method
+            if reviewBeforeInsert {
+                // Show review popup
+                pendingCleanupResult = cleanupResult ?? CleanupResult(
+                    original: text, cleaned: text, changes: []
+                )
+                showReviewPopup = true
+                statusMessage = "Review transcription..."
+                onRequestReview?()
+            } else if autoPaste {
+                await textInserter.insertText(finalText)
+                statusMessage = "Done - inserted text"
+            } else {
+                statusMessage = "Done - text ready"
             }
         }
+    }
+
+    // MARK: - Review popup actions
+
+    /// Insert the edited/reviewed text from the review popup
+    func insertReviewed(text: String) {
+        Task {
+            await textInserter.insertText(text)
+            lastResult = text
+            pendingCleanupResult = nil
+            showReviewPopup = false
+            statusMessage = "Done - inserted reviewed text"
+        }
+    }
+
+    /// Insert the original (uncleaned) text
+    func insertOriginal() {
+        Task {
+            let original = pendingCleanupResult?.original ?? pendingOriginalText
+            await textInserter.insertText(original)
+            lastResult = original
+            pendingCleanupResult = nil
+            showReviewPopup = false
+            statusMessage = "Done - inserted original text"
+        }
+    }
+
+    /// Cancel the review without inserting anything
+    func cancelReview() {
+        pendingCleanupResult = nil
+        showReviewPopup = false
+        statusMessage = "Insertion cancelled"
     }
 
     func rePasteLast() async {

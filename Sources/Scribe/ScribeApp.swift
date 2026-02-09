@@ -4,6 +4,7 @@ import SwiftUI
 struct ScribeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var manager = DictationManager()
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         MenuBarExtra("Scribe", systemImage: manager.isDictating ? "mic.fill" : "mic") {
@@ -11,6 +12,10 @@ struct ScribeApp: App {
                 .environment(manager)
                 .environment(manager.historyStore)
                 .task {
+                    manager.onRequestReview = { [openWindow] in
+                        openWindow(id: "review")
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                    }
                     await manager.setup()
                 }
         }
@@ -27,5 +32,11 @@ struct ScribeApp: App {
                 .environment(manager)
         }
         .defaultSize(width: 450, height: 350)
+
+        Window("Review Transcription", id: "review") {
+            ReviewPopup()
+                .environment(manager)
+        }
+        .defaultSize(width: 500, height: 350)
     }
 }
