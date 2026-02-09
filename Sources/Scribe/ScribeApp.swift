@@ -5,6 +5,7 @@ struct ScribeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var manager = DictationManager()
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some Scene {
         MenuBarExtra("Scribe", systemImage: manager.isDictating ? "mic.fill" : "mic") {
@@ -18,7 +19,19 @@ struct ScribeApp: App {
                     }
                     await manager.setup()
                 }
+                .onAppear {
+                    if !hasCompletedOnboarding {
+                        openWindow(id: "onboarding")
+                        NSApplication.shared.activate(ignoringOtherApps: true)
+                    }
+                }
         }
+
+        Window("Welcome to Scribe", id: "onboarding") {
+            OnboardingView()
+        }
+        .defaultSize(width: 480, height: 400)
+        .windowResizability(.contentSize)
 
         Window("Scribe History", id: "history") {
             HistoryView()
