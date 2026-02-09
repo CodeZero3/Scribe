@@ -8,10 +8,19 @@ final class DictationManager {
     let transcriptionEngine = TranscriptionEngine()
     let hotkeyManager = HotkeyManager()
     let textInserter = TextInserter()
+    let historyStore = HistoryStore()
 
     var lastResult = ""
     var isDictating = false
     var statusMessage = ""
+
+    // Settings
+    var selectedDeviceID = ""
+    var selectedModel = "base.en"
+    var autoPaste = true
+
+    // Duration tracking
+    private var recordingStartTime: Date?
 
     func setup() async {
         // Load whisper model
@@ -45,6 +54,7 @@ final class DictationManager {
         do {
             try audioRecorder.startRecording()
             isDictating = true
+            recordingStartTime = Date()
             statusMessage = "Recording..."
         } catch {
             statusMessage = "Mic error: \(error.localizedDescription)"
@@ -53,7 +63,9 @@ final class DictationManager {
 
     private func stopDictation() {
         let samples = audioRecorder.stopRecording()
+        let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
         isDictating = false
+        recordingStartTime = nil
 
         guard !samples.isEmpty else {
             statusMessage = "No audio captured"
@@ -69,7 +81,14 @@ final class DictationManager {
             }
             lastResult = text
             statusMessage = "Done - inserted text"
-            await textInserter.insertText(text)
+
+            // Save to history
+            historyStore.addRecord(text: text, duration: duration)
+
+            // Auto-paste if enabled
+            if autoPaste {
+                await textInserter.insertText(text)
+            }
         }
     }
 
@@ -81,6 +100,8 @@ final class DictationManager {
         await textInserter.insertText(lastResult)
         statusMessage = "Re-pasted last dictation"
     }
+
+    // MARK: - Permissions
 
     /// Check if Accessibility permission is granted (needed for text insertion)
     func checkAccessibilityPermission() -> Bool {
