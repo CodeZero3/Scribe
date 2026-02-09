@@ -43,6 +43,16 @@ final class AudioRecorder {
         }
 
         let inputNode = engine.inputNode
+
+        // Always remove any existing tap before installing a new one.
+        // A leftover tap causes NSException in InstallTapOnNode.
+        inputNode.removeTap(onBus: 0)
+
+        // Stop engine if running so format queries return fresh values
+        if engine.isRunning {
+            engine.stop()
+        }
+
         let hwFormat = Self.queryHardwareInputFormat()
         let engineFormat = inputNode.outputFormat(forBus: 0)
 
