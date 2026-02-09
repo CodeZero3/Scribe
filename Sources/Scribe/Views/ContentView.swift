@@ -5,6 +5,7 @@ struct ContentView: View {
     @Environment(HistoryStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @State private var showCopied = false
+    @State private var isOptimizing = false
     @State private var selectedTab: SidebarTab = .history
 
     enum SidebarTab: String, CaseIterable {
@@ -115,6 +116,29 @@ struct ContentView: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                 Spacer()
+                if manager.promptOptimizer.isConfigured {
+                    Button {
+                        Task {
+                            isOptimizing = true
+                            let optimized = await manager.optimizeText(manager.lastResult)
+                            manager.lastResult = optimized
+                            isOptimizing = false
+                        }
+                    } label: {
+                        if isOptimizing {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Image(systemName: "wand.and.stars")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("Optimize as AI prompt")
+                    .disabled(isOptimizing)
+                }
+
                 Button {
                     manager.copyToClipboard(manager.lastResult)
                     showCopied = true

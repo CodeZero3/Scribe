@@ -70,6 +70,7 @@ struct HistoryRowView: View {
     let manager: DictationManager
     let store: HistoryStore
     @State private var showCopied = false
+    @State private var isOptimizing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -87,6 +88,29 @@ struct HistoryRowView: View {
                 Label(formattedDuration(record.duration), systemImage: "timer")
 
                 Spacer()
+
+                // Optimize button
+                if manager.promptOptimizer.isConfigured {
+                    Button {
+                        Task {
+                            isOptimizing = true
+                            let optimized = await manager.optimizeText(record.text)
+                            manager.lastResult = optimized
+                            isOptimizing = false
+                        }
+                    } label: {
+                        if isOptimizing {
+                            ProgressView()
+                                .controlSize(.mini)
+                        } else {
+                            Image(systemName: "wand.and.stars")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .help("Optimize as AI prompt")
+                    .disabled(isOptimizing)
+                }
 
                 // Copy button
                 Button {

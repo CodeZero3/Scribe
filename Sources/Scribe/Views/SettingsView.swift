@@ -4,6 +4,8 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(DictationManager.self) private var manager
     @State private var availableDevices: [AudioDeviceInfo] = []
+    @AppStorage("geminiAPIKey") private var geminiAPIKey = ""
+    @AppStorage("autoOptimize") private var autoOptimize = false
 
     var body: some View {
         @Bindable var mgr = manager
@@ -47,6 +49,24 @@ struct SettingsView: View {
                 Toggle("Auto-paste after dictation", isOn: $mgr.autoPaste)
                 Toggle("Review before inserting", isOn: $mgr.reviewBeforeInsert)
                 Text("Show a popup to review and edit the transcription before it is inserted.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // MARK: - AI Optimization
+
+            Section("AI Optimization") {
+                SecureField("Gemini API Key", text: $geminiAPIKey)
+                    .textFieldStyle(.roundedBorder)
+
+                Link("Get free API key from Google AI Studio",
+                     destination: URL(string: "https://aistudio.google.com/apikey")!)
+                    .font(.caption)
+
+                Toggle("Auto-optimize dictations", isOn: $autoOptimize)
+                    .disabled(geminiAPIKey.isEmpty)
+
+                Text("When enabled, dictated text is restructured into a clear, well-formatted prompt optimized for AI consumption before copying to clipboard.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

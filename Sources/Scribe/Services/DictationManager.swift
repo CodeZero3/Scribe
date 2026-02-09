@@ -10,6 +10,7 @@ final class DictationManager {
     let textInserter = TextInserter()
     let historyStore = HistoryStore()
     let textCleanup = TextCleanup()
+    let promptOptimizer = PromptOptimizer()
 
     var lastResult = ""
     var isDictating = false
@@ -21,6 +22,11 @@ final class DictationManager {
     var autoPaste = true
     var enableCleanup = true
     var reviewBeforeInsert = false
+
+    var autoOptimize: Bool {
+        get { UserDefaults.standard.bool(forKey: "autoOptimize") }
+        set { UserDefaults.standard.set(newValue, forKey: "autoOptimize") }
+    }
 
     // Review popup state
     var pendingCleanupResult: CleanupResult?
@@ -111,7 +117,13 @@ final class DictationManager {
 
             // Run text cleanup if enabled
             let cleanupResult = enableCleanup ? textCleanup.cleanup(text) : nil
-            let finalText = cleanupResult?.cleaned ?? text
+            var finalText = cleanupResult?.cleaned ?? text
+
+            // Run prompt optimization if enabled
+            if autoOptimize && promptOptimizer.isConfigured {
+                statusMessage = "Optimizing..."
+                finalText = await promptOptimizer.optimize(finalText)
+            }
 
             lastResult = finalText
             pendingOriginalText = text
@@ -134,6 +146,16 @@ final class DictationManager {
                 statusMessage = "Done - copied to clipboard"
             }
         }
+    }
+
+    // MARK: - Prompt Optimization
+
+    func optimizeText(_ text: String) async -> String {
+        statusMessage = "Optimizing..."
+        let result = await promptOptimizer.optimize(text)
+        statusMessage = result != text ? "Optimized - copied to clipboard" : "Optimization failed - using original"
+        copyToClipboard(result)
+        return result
     }
 
     // MARK: - Clipboard
