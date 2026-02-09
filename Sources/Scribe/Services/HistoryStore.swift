@@ -7,6 +7,8 @@ struct DictationRecord: Identifiable, Sendable {
     let timestamp: Date
     let duration: TimeInterval
     let wordCount: Int
+    let parentId: String?
+    let optimizationMode: String?
 }
 
 /// Box holding the raw SQLite pointer, kept outside @Observable tracking.
@@ -42,6 +44,7 @@ final class HistoryStore {
     init() {
         openDatabase()
         createTable()
+        migrateSchema()
         loadRecords()
     }
 
@@ -69,12 +72,18 @@ final class HistoryStore {
         sqlite3_exec(db, sql, nil, nil, nil)
     }
 
-    func addRecord(text: String, duration: TimeInterval) {
+    private func migrateSchema() {
+        // Add parent_id and optimization_mode columns if they don't exist
+        sqlite3_exec(db, "ALTER TABLE dictations ADD COLUMN parent_id TEXT", nil, nil, nil)
+        sqlite3_exec(db, "ALTER TABLE dictations ADD COLUMN optimization_mode TEXT", nil, nil, nil)
+    }
+
+    func addRecord(text: String, duration: TimeInterval, parentId: String? = nil, optimizationMode: String? = nil) {
         let id = UUID().uuidString
         let timestamp = Date().timeIntervalSince1970
         let wordCount = text.split(separator: " ").count
 
-        let sql = "INSERT INTO dictations (id, text, timestamp, duration, word_count) VALUES (?, ?, ?, ?, ?)"
+        let sql = "INSERT INTO dictations (id, text, timestamp, duration, word_count, parent_id, optimization_mode) VALUES (?, ?, ?, ?, ?, ?, ?)"
         var stmt: OpaquePointer?
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
             sqlite3_bind_text(stmt, 1, (id as NSString).utf8String, -1, nil)
@@ -82,6 +91,16 @@ final class HistoryStore {
             sqlite3_bind_double(stmt, 3, timestamp)
             sqlite3_bind_double(stmt, 4, duration)
             sqlite3_bind_int(stmt, 5, Int32(wordCount))
+            if let parentId {
+                sqlite3_bind_text(stmt, 6, (parentId as NSString).utf8String, -1, nil)
+            } else {
+                sqlite3_bind_null(stmt, 6)
+            }
+            if let optimizationMode {
+                sqlite3_bind_text(stmt, 7, (optimizationMode as NSString).utf8String, -1, nil)
+            } else {
+                sqlite3_bind_null(stmt, 7)
+            }
             sqlite3_step(stmt)
         }
         sqlite3_finalize(stmt)
@@ -112,7 +131,7 @@ final class HistoryStore {
 
     private func loadRecords() {
         var results: [DictationRecord] = []
-        let sql = "SELECT id, text, timestamp, duration, word_count FROM dictations ORDER BY timestamp DESC"
+        let sql = "SELECT id, text, timestamp, duration, word_count, parent_id, optimization_mode FROM dictations ORDER BY timestamp DESC"
         var stmt: OpaquePointer?
         if sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK {
             while sqlite3_step(stmt) == SQLITE_ROW {
@@ -125,9 +144,12 @@ final class HistoryStore {
                 let timestamp = Date(timeIntervalSince1970: sqlite3_column_double(stmt, 2))
                 let duration = sqlite3_column_double(stmt, 3)
                 let wordCount = Int(sqlite3_column_int(stmt, 4))
+                let parentId: String? = sqlite3_column_text(stmt, 5).map { String(cString: $0) }
+                let optimizationMode: String? = sqlite3_column_text(stmt, 6).map { String(cString: $0) }
                 results.append(DictationRecord(
                     id: id, text: text, timestamp: timestamp,
-                    duration: duration, wordCount: wordCount
+                    duration: duration, wordCount: wordCount,
+                    parentId: parentId, optimizationMode: optimizationMode
                 ))
             }
         }

@@ -103,15 +103,19 @@ struct ContentView: View {
 
             VStack(spacing: 4) {
                 Text(manager.transcriptionEngine.loadingStatus)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
 
                 if !manager.statusMessage.isEmpty {
                     Text(manager.statusMessage)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.orange)
+                        .contentTransition(.numericText())
                 }
             }
+            .padding(.vertical, 4)
+            .animation(.easeInOut(duration: 0.3), value: manager.statusMessage)
 
             Text("Hold Ctrl+CapsLock")
                 .font(.caption2)
