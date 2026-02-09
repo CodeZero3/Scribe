@@ -3,41 +3,49 @@ import SwiftUI
 @main
 struct ScribeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @State private var audioRecorder = AudioRecorder()
-    @State private var transcriptionEngine = TranscriptionEngine()
+    @State private var manager = DictationManager()
 
     var body: some Scene {
-        MenuBarExtra("Scribe", systemImage: audioRecorder.isRecording ? "mic.fill" : "mic") {
+        MenuBarExtra("Scribe", systemImage: manager.isDictating ? "mic.fill" : "mic") {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Scribe - Voice to Text")
+                Text("Scribe")
                     .font(.headline)
 
-                Text("Status: \(transcriptionEngine.loadingStatus)")
+                Text(manager.transcriptionEngine.loadingStatus)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Divider()
-
-                if audioRecorder.isRecording {
-                    Button("Stop Dictation") {
-                        stopDictation()
-                    }
-                } else {
-                    Button("Start Dictation") {
-                        startDictation()
-                    }
-                    .disabled(!transcriptionEngine.isModelLoaded)
-                }
-
-                if transcriptionEngine.isTranscribing {
-                    Text("Transcribing...")
+                if !manager.statusMessage.isEmpty {
+                    Text(manager.statusMessage)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
 
-                if !transcriptionEngine.lastTranscription.isEmpty {
+                Divider()
+
+                // Accessibility permission check
+                if !manager.checkAccessibilityPermission() {
+                    Button("Grant Accessibility Access") {
+                        manager.requestAccessibilityPermission()
+                    }
+                    .foregroundStyle(.red)
+                }
+
+                Button(manager.isDictating ? "Stop Dictation (Ctrl+Shift+Space)" : "Start Dictation (Ctrl+Shift+Space)") {
+                    manager.toggleDictation()
+                }
+                .disabled(!manager.transcriptionEngine.isModelLoaded)
+
+                if !manager.lastResult.isEmpty {
+                    Button("Re-paste Last (Ctrl+Shift+V)") {
+                        Task {
+                            await manager.rePasteLast()
+                        }
+                    }
+
                     Divider()
-                    Text("Last: \(String(transcriptionEngine.lastTranscription.prefix(100)))")
+
+                    Text("Last: \(String(manager.lastResult.prefix(100)))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
@@ -52,31 +60,8 @@ struct ScribeApp: App {
             }
             .padding(4)
             .task {
-                await transcriptionEngine.loadModel()
+                await manager.setup()
             }
-        }
-    }
-
-    private func startDictation() {
-        do {
-            try audioRecorder.startRecording()
-        } catch {
-            transcriptionEngine.lastTranscription = "[Mic error: \(error.localizedDescription)]"
-        }
-    }
-
-    private func stopDictation() {
-        let samples = audioRecorder.stopRecording()
-        guard !samples.isEmpty else {
-            transcriptionEngine.lastTranscription = "[No audio captured]"
-            return
-        }
-        Task {
-            let text = await transcriptionEngine.transcribe(audioSamples: samples)
-            // Copy transcription to clipboard for easy pasting
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
         }
     }
 }
