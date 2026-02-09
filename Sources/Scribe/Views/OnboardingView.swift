@@ -155,30 +155,43 @@ struct OnboardingView: View {
                     .font(.callout)
             } else {
                 Button {
-                    openAccessibilitySettings()
+                    promptAccessibility()
                 } label: {
-                    Text("Open System Settings")
+                    Text("Grant Accessibility Access")
                         .frame(maxWidth: 220)
                 }
                 .controlSize(.large)
                 .buttonStyle(.borderedProminent)
 
-                Text("Toggle Scribe on, then come back here.")
+                Text("A system dialog should appear. If not, open\nSystem Settings > Privacy & Security > Accessibility\nand add Scribe manually.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
             }
 
             Spacer()
 
-            Button {
-                withAnimation { currentStep = 3 }
-            } label: {
-                Text("Next")
-                    .frame(maxWidth: 200)
+            HStack(spacing: 16) {
+                if !accessibilityGranted {
+                    Button {
+                        withAnimation { currentStep = 3 }
+                    } label: {
+                        Text("Skip for now")
+                            .frame(maxWidth: 140)
+                    }
+                    .controlSize(.large)
+                }
+
+                Button {
+                    withAnimation { currentStep = 3 }
+                } label: {
+                    Text("Next")
+                        .frame(maxWidth: 140)
+                }
+                .controlSize(.large)
+                .buttonStyle(.borderedProminent)
+                .disabled(!accessibilityGranted)
             }
-            .controlSize(.large)
-            .buttonStyle(.borderedProminent)
-            .disabled(!accessibilityGranted)
         }
         .onAppear {
             startAccessibilityPolling()
@@ -259,6 +272,13 @@ struct OnboardingView: View {
                 micGranted = granted
             }
         }
+    }
+
+    private func promptAccessibility() {
+        // Trigger the system prompt that asks user to grant accessibility
+        let promptKey = "AXTrustedCheckOptionPrompt" as CFString
+        let options = [promptKey: kCFBooleanTrue!] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
     }
 
     private func openAccessibilitySettings() {

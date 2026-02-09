@@ -18,17 +18,20 @@ final class TranscriptionEngine {
     private var whisperBox: WhisperKitBox?
 
     func loadModel() async {
-        loadingStatus = "Loading model..."
+        loadingStatus = "Downloading model (first time ~150MB)..."
+        NSLog("[Scribe] Starting model load...")
         do {
             // WhisperKit handles model download automatically
-            let config = WhisperKitConfig(model: "base.en", verbose: false, logLevel: .none)
+            let config = WhisperKitConfig(model: "base.en", verbose: true, logLevel: .debug)
             let kit = try await WhisperKit(config)
             whisperBox = WhisperKitBox(kit)
             isModelLoaded = true
             loadingStatus = "Model ready"
+            NSLog("[Scribe] Model loaded successfully!")
         } catch {
             loadingStatus = "Error: \(error.localizedDescription)"
             isModelLoaded = false
+            NSLog("[Scribe] Model load error: %@", "\(error)")
         }
     }
 

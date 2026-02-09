@@ -35,12 +35,19 @@ final class DictationManager {
     private var pendingOriginalText: String = ""
 
     func setup() async {
+        NSLog("[Scribe] DictationManager.setup() called")
         // Load whisper model
         await transcriptionEngine.loadModel()
+        NSLog("[Scribe] Model load finished, status: %@", transcriptionEngine.loadingStatus)
 
-        // Register hotkeys
-        hotkeyManager.onToggleDictation = { [weak self] in
-            self?.toggleDictation()
+        // Register hotkeys — push-to-talk (Ctrl+CapsLock)
+        hotkeyManager.onStartDictation = { [weak self] in
+            self?.startDictation()
+        }
+        hotkeyManager.onStopDictation = { [weak self] in
+            if self?.isDictating == true {
+                self?.stopDictation()
+            }
         }
         hotkeyManager.onRepaste = { [weak self] in
             Task { @MainActor in
@@ -51,6 +58,7 @@ final class DictationManager {
     }
 
     func toggleDictation() {
+        NSLog("[Scribe] toggleDictation called, isDictating: %@", isDictating ? "true" : "false")
         if isDictating {
             stopDictation()
         } else {
@@ -58,27 +66,35 @@ final class DictationManager {
         }
     }
 
-    private func startDictation() {
+    func startDictation() {
+        guard !isDictating else { return }
         guard transcriptionEngine.isModelLoaded else {
+            NSLog("[Scribe] startDictation: Model not ready")
             statusMessage = "Model not ready"
             return
         }
         do {
+            NSLog("[Scribe] startDictation: Starting recording...")
             try audioRecorder.startRecording()
             isDictating = true
             recordingStartTime = Date()
             statusMessage = "Recording..."
+            NSLog("[Scribe] startDictation: Recording started")
         } catch {
+            NSLog("[Scribe] startDictation error: %@", error.localizedDescription)
             statusMessage = "Mic error: \(error.localizedDescription)"
         }
     }
 
-    private func stopDictation() {
+    func stopDictation() {
+        guard isDictating else { return }
+        NSLog("[Scribe] stopDictation called")
         let samples = audioRecorder.stopRecording()
         let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
         isDictating = false
         recordingStartTime = nil
 
+        NSLog("[Scribe] stopDictation: Got %d samples", samples.count)
         guard !samples.isEmpty else {
             statusMessage = "No audio captured"
             return
@@ -87,6 +103,7 @@ final class DictationManager {
         statusMessage = "Transcribing..."
         Task {
             let text = await transcriptionEngine.transcribe(audioSamples: samples)
+            NSLog("[Scribe] Transcription result: %@", text)
             guard !text.isEmpty && !text.hasPrefix("[") else {
                 statusMessage = "No speech detected"
                 return
@@ -99,30 +116,36 @@ final class DictationManager {
             lastResult = finalText
             pendingOriginalText = text
 
-            // Save to history (save the final/cleaned text)
+            // Always copy to clipboard
+            copyToClipboard(finalText)
+
+            // Save to history
             historyStore.addRecord(text: finalText, duration: duration)
 
             // Determine insertion method
             if reviewBeforeInsert {
-                // Show review popup
                 pendingCleanupResult = cleanupResult ?? CleanupResult(
                     original: text, cleaned: text, changes: []
                 )
                 showReviewPopup = true
                 statusMessage = "Review transcription..."
                 onRequestReview?()
-            } else if autoPaste {
-                await textInserter.insertText(finalText)
-                statusMessage = "Done - inserted text"
             } else {
-                statusMessage = "Done - text ready"
+                statusMessage = "Done - copied to clipboard"
             }
         }
     }
 
+    // MARK: - Clipboard
+
+    func copyToClipboard(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
     // MARK: - Review popup actions
 
-    /// Insert the edited/reviewed text from the review popup
     func insertReviewed(text: String) {
         Task {
             await textInserter.insertText(text)
@@ -133,7 +156,6 @@ final class DictationManager {
         }
     }
 
-    /// Insert the original (uncleaned) text
     func insertOriginal() {
         Task {
             let original = pendingCleanupResult?.original ?? pendingOriginalText
@@ -145,7 +167,6 @@ final class DictationManager {
         }
     }
 
-    /// Cancel the review without inserting anything
     func cancelReview() {
         pendingCleanupResult = nil
         showReviewPopup = false
@@ -157,20 +178,17 @@ final class DictationManager {
             statusMessage = "Nothing to re-paste"
             return
         }
-        await textInserter.insertText(lastResult)
-        statusMessage = "Re-pasted last dictation"
+        copyToClipboard(lastResult)
+        statusMessage = "Copied to clipboard"
     }
 
     // MARK: - Permissions
 
-    /// Check if Accessibility permission is granted (needed for text insertion)
     func checkAccessibilityPermission() -> Bool {
         return AXIsProcessTrusted()
     }
 
-    /// Prompt user to grant Accessibility permission
     func requestAccessibilityPermission() {
-        // Use the string value directly to avoid Swift 6 concurrency error on the C global
         let promptKey = "AXTrustedCheckOptionPrompt" as CFString
         let options = [promptKey: kCFBooleanTrue!] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)

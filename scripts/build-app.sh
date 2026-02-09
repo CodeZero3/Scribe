@@ -39,6 +39,11 @@ else
     echo "WARNING: Resources/Info.plist not found - app bundle may not work correctly."
 fi
 
+# Copy app icon
+if [[ -f "Resources/AppIcon.icns" ]]; then
+    cp Resources/AppIcon.icns "$APP_DIR/Resources/AppIcon.icns"
+fi
+
 echo "      App bundle created at build/Scribe.app"
 
 # Step 3: Report

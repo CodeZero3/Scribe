@@ -54,7 +54,7 @@ struct SettingsView: View {
             // MARK: - Hotkeys (read-only)
 
             Section("Hotkeys") {
-                LabeledContent("Toggle Dictation", value: "Ctrl + Shift + Space")
+                LabeledContent("Push-to-Talk", value: "Hold Ctrl + CapsLock")
                 LabeledContent("Re-paste Last", value: "Ctrl + Shift + V")
             }
         }
